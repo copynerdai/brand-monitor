@@ -1,0 +1,6 @@
+# File macchina-specifici / non condivisibili — esclusi quando il pacchetto è pushato come repo
+archive-root.txt
+tools/test-*
+node_modules/
+package-lock.json
+package.json
