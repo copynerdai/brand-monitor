@@ -4,7 +4,7 @@
 // Le schede e i report li scrive poi il modello, brand per brand, leggendo i manifest.
 //
 // Uso:
-//   NODE_PATH=~/.invoice-tools/node_modules node run-all.mjs [--per-page 100] [--cap 18] [--no-transcribe] [--only slug1,slug2]
+//   node tools/run-all.mjs [--per-page 100] [--cap 18] [--no-transcribe] [--only slug1,slug2]
 
 import { readdirSync, existsSync, readFileSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -15,6 +15,7 @@ const argv = process.argv.slice(2);
 const flags = {};
 for (let i = 0; i < argv.length; i++) {
   if (argv[i].startsWith("--")) { const k = argv[i].slice(2); flags[k] = (argv[i + 1] && !argv[i + 1].startsWith("--")) ? argv[++i] : true; }
+  else { console.error(`Argomento posizionale non supportato: "${argv[i]}". Per un solo brand usa scrape-ads.mjs <slug>, o qui --only ${argv[i]}.`); process.exit(1); }
 }
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -38,6 +39,8 @@ if (!brands.length) { console.error(`Nessun brand configurato in ${ARCHIVE} (ser
 const passthru = [];
 if (flags["per-page"]) passthru.push("--per-page", String(flags["per-page"]));
 if (flags.cap) passthru.push("--cap", String(flags.cap));
+const rootArg = flags.root ? ["--root", String(flags.root)] : [];
+passthru.push(...rootArg);
 
 console.log(`\n🔁 MONITORA TUTTI — ${brands.length} brand: ${brands.join(", ")}\n`);
 const esiti = [];
@@ -45,7 +48,7 @@ for (const b of brands) {
   console.log(`\n════════ ${b} ════════`);
   try {
     execFileSync("node", [join(__dirname, "scrape-ads.mjs"), b, ...passthru], { stdio: "inherit" });
-    if (!flags["no-transcribe"]) execFileSync("node", [join(__dirname, "transcribe-deep.mjs"), b], { stdio: "inherit" });
+    if (!flags["no-transcribe"]) execFileSync("node", [join(__dirname, "transcribe-deep.mjs"), b, ...rootArg], { stdio: "inherit" });
     esiti.push(`✓ ${b}`);
   } catch (e) {
     esiti.push(`✗ ${b} (${e.message.split("\n")[0]})`);

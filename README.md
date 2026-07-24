@@ -26,9 +26,9 @@ I tool trovano l'archivio da soli: `--root <path>` → env `BRAND_MONITOR_ARCHIV
 
 ## Condividere con gli studenti (il modo più semplice)
 
-Metti questa cartella su un repo GitHub (es. `github.com/<account>/brand-monitor`). Lo studente fa **2 cose sole**, al resto pensa il suo Claude:
+Il pacchetto è pubblicato su **github.com/copynerdai/brand-monitor**. Lo studente fa **2 cose sole**, al resto pensa il suo Claude:
 
-1. Nel Terminale: `git clone https://github.com/<account>/brand-monitor.git ~/brand-monitor`
+1. Nel Terminale: `git clone https://github.com/copynerdai/brand-monitor.git ~/brand-monitor`
 2. Nel suo Claude Code: **"installa la skill ad-scraping seguendo ~/brand-monitor/INSTALL.md"**
 
 [INSTALL.md](INSTALL.md) è scritto perché lo **esegua Claude**: rileva Mac o Windows, installa le dipendenze (Node + Playwright + Chromium; ffmpeg + Whisper per le trascrizioni), mette lo slash command, crea `archive-root.txt`, e fa un mini test. Lo studente risponde solo a un paio di domande. Aggiornamenti: `cd ~/brand-monitor && git pull`.

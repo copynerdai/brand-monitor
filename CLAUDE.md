@@ -18,7 +18,7 @@
 - **Un solo brand**: `/ad-scraping <brand>` → esegue la pipeline per quel brand osservato.
 - **TUTTI i brand configurati** (richiesta di Simone): `/ad-scraping` senza brand, oppure "monitora tutti i brand" / "tutti" / "all" → aggiorna **ogni** brand osservato che ha un `config.json` nell'archivio, in un colpo solo. Usa il driver deterministico:
   ```
-  NODE_PATH=~/.invoice-tools/node_modules node tools/run-all.mjs [--per-page 100] [--cap 18] [--only slug1,slug2]
+  node tools/run-all.mjs [--per-page 100] [--cap 18] [--only slug1,slug2]
   ```
   Cicla ogni brand attraverso censimento + trascrizione; poi l'orchestratore scrive schede + report **per ogni brand** (passi C-E) leggendo ciascun `_run-<week>.json`. La `tracksheet-concorrenza.base` mostra già tutti i brand insieme.
 - Il nome di un **brand cliente** → usa la sua watchlist per scegliere quali brand osservati aggiornare (§4).
@@ -41,7 +41,7 @@ I tool risolvono il percorso dell'archivio da soli (`--root` → env `BRAND_MONI
 
 **Passo A — Censimento (deterministico).** Dalla cartella di questo pacchetto:
 ```
-NODE_PATH=~/.invoice-tools/node_modules node tools/scrape-ads.mjs <slug-osservato> [--per-page 100] [--cap 18]
+node tools/scrape-ads.mjs <slug-osservato> [--per-page 100] [--cap 18]
 ```
 - Legge il `config.json` del brand, cicla **ogni** pagina (`view_all_page_id` → esatto, zero rumore), prendendo le **prime 100 ads attive per pagina** (bastano; il set iniziale della Ad Library mescola longevi e recenti, quindi cattura sia i winner sia le novità). Nessun filtro sulla data (taglierebbe i winner longevi ancora attivi).
 - Scrive `<osservato>/ledger.json` (una riga per creatività, dedup per `cluster_id`, varianti contate su tutte le pagine) + un manifest `_run-<week>.json`. Non conserva mai media.
@@ -49,14 +49,14 @@ NODE_PATH=~/.invoice-tools/node_modules node tools/scrape-ads.mjs <slug-osservat
 
 **Passo B — Trascrizione (deterministico).**
 ```
-NODE_PATH=~/.invoice-tools/node_modules node tools/transcribe-deep.mjs <slug-osservato>
+node tools/transcribe-deep.mjs <slug-osservato>
 ```
 - Trascrive solo i video del set `deep` del manifest (Whisper locale), scrive ciascuna trascrizione in `deep[].trascrizione`, cestina il video temporaneo. La lingua si legge dal `config.json` (`--lang` per forzarla). Molti video delle ads sono testo-a-schermo + musica senza voce — è normale; la scheda lo annota.
 
 **Passo C — Schede (giudizio).** Per ogni item `deep[]`, scrivi `<osservato>/ads/<slug>-<rep_id>.md` secondo [DESIGN §4](DESIGN-report-e-tracking.md):
 - **Slug**: 2-3 parole kebab-case che nominano l'angolo (coniato una volta, poi immutabile). File `<slug>-<rep_id>.md`.
 - Corpo: **copy verbatim**, **trascrizione integrale** (se video), e l'**analisi a 6 campi** (angolo-1riga, big idea/meccanismo, hook, struttura, leva emotiva, target/avatar, CTA, 💡 trasferibile). Affina il formato al valore preciso della tassonomia (DESIGN §8). La sezione `## Creatività` = 1 riga col link Ad Library + breve nota visiva (nessun media conservato).
-- Poi **aggiorna la riga del ledger** per quel `rep_id`: `angolo_1riga`, `formato` (affinato), `scheda` (percorso), `trascritta`.
+- Poi **aggiorna la riga del ledger** usando la chiave **`ledger_key`** dell'item (NON `rep_id`: il rappresentante può cambiare tra run, la `ledger_key` è stabile): `angolo_1riga`, `formato` (affinato), `scheda` (percorso), `trascritta`.
 
 **Passo D — Letture leggere (giudizio).** Per ogni item `light[]`, una riga d'angolo **+ uno snippet verbatim di 1-2 righe del copy nuovo** (nessuna scheda). Alimenta la sezione prioritaria "cosa stanno testando" del report.
 

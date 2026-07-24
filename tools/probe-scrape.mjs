@@ -3,14 +3,16 @@
 // leggere le ads + fare screenshot, gestendo il consenso cookie EU.
 // NON è lo scraper finale: serve solo a de-rischiare l'approccio.
 //
-// Uso: NODE_PATH=~/.invoice-tools/node_modules node probe-scrape.mjs "marco lutzu"
+// Uso: node tools/probe-scrape.mjs "marco lutzu"   (diagnostica: rieseguire se Meta cambia layout)
 
 import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
 
 const q = process.argv[2] || "marco lutzu";
-const OUT = process.argv[3] || "/private/tmp/claude-501/-Users-simonecoria/0efee644-9957-4f45-8411-01c960b3464c/scratchpad/adlib-probe.png";
+const OUT = process.argv[3] || join(tmpdir(), "adlib-probe.png");
 
 const url =
   "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=IT" +

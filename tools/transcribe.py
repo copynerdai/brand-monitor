@@ -18,10 +18,12 @@ def main():
     text = None
 
     # 1) mlx-whisper — Mac Apple Silicon (usa la GPU)
+    #    modello via env BRAND_MONITOR_WHISPER_MLX (default: large-v3-turbo)
     try:
         import mlx_whisper
         kw = {} if lang == "auto" else {"language": lang}
-        r = mlx_whisper.transcribe(infile, path_or_hf_repo="mlx-community/whisper-large-v3-turbo", **kw)
+        mlx_model = os.environ.get("BRAND_MONITOR_WHISPER_MLX", "mlx-community/whisper-large-v3-turbo")
+        r = mlx_whisper.transcribe(infile, path_or_hf_repo=mlx_model, **kw)
         text = (r.get("text") or "").strip()
     except Exception:
         text = None

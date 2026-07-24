@@ -1,6 +1,6 @@
 // probe-filters.mjs — verifica quali FILTRI/ORDINAMENTI offre la Ad Library pubblica senza login.
 // Domanda chiave: il filtro per data di inizio funziona via URL? (accorcia il censimento dei brand enormi)
-// Uso: NODE_PATH=~/.invoice-tools/node_modules node probe-filters.mjs
+// Uso: node tools/probe-filters.mjs   (diagnostica: rieseguire se Meta cambia layout)
 
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);

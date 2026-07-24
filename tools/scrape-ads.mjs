@@ -10,7 +10,8 @@
 // NON scrive schede/report (giudizio → skill brand-monitor.md). NON conserva media.
 //
 // Uso:
-//   NODE_PATH=~/.invoice-tools/node_modules node scrape-ads.mjs <brand-slug> [--pages ID1,ID2] [--country US] [--per-page 100] [--cap 18] [--headed]
+//   node tools/scrape-ads.mjs <brand-slug> [--pages ID1,ID2] [--country US] [--per-page 100] [--cap 18] [--headed]
+//   (playwright si risolve dal node_modules del pacchetto; se installato altrove, premetti NODE_PATH=<percorso>)
 //   (senza --pages legge monitoraggio/<brand-slug>/config.json)
 //
 // config.json:
@@ -46,7 +47,7 @@ function resolveArchiveRoot() {
   if (process.env.BRAND_MONITOR_ARCHIVE) return process.env.BRAND_MONITOR_ARCHIVE;
   const cfg = join(__dirname, "..", "archive-root.txt");
   if (existsSync(cfg)) { const p = readFileSync(cfg, "utf8").trim(); if (p) return p; }
-  console.error("Archivio non configurato: crea _system/skills/brand-monitor/archive-root.txt (percorso assoluto della cartella monitoraggio/), oppure --root <path>, oppure BRAND_MONITOR_ARCHIVE.");
+  console.error(`Archivio non configurato: crea ${join(__dirname, "..", "archive-root.txt")} (dentro: il percorso assoluto della TUA cartella dati), oppure --root <path>, oppure env BRAND_MONITOR_ARCHIVE.`);
   process.exit(1);
 }
 const MON_ROOT = resolveArchiveRoot();
@@ -63,7 +64,7 @@ else if (config && config.pagine_fb) pages = config.pagine_fb;
 const COUNTRY = flags.country || (config && config.paese) || "IT";
 const QUERY = flags.query || (config && config.query) || pos[1] || "";
 if (!pages.length && !QUERY) {
-  console.error(`Nessuna pagina configurata. Crea ${("monitoraggio/" + BRAND + "/config.json")} con "pagine_fb":[{"page_id":"…"}], oppure passa --pages ID1,ID2.`);
+  console.error(`Nessuna pagina configurata. Crea ${CONFIG_PATH} con "pagine_fb":[{"page_id":"…"}], oppure passa --pages ID1,ID2.`);
   process.exit(1);
 }
 const PER_PAGE = flags["per-page"] ? parseInt(flags["per-page"], 10) : 100; // "le prime 100 ads" per pagina (Simone)
@@ -199,7 +200,13 @@ for (const c of clusterList) {
   seenClusters.add(c.cluster_id);
   const known = byCluster.get(c.cluster_id);
   if (known) {
-    const e = known.entry; e.stato = "attiva"; e.giorni_attivi = c.giorni_attivi; e.varianti_attive = c.varianti_attive;
+    const e = known.entry;
+    e.stato = "attiva";
+    // longevità SEMPRE dalla prima data mai vista nel ledger (non dal pool attivo corrente:
+    // se la variante più vecchia si spegne, la creatività resta longeva — non "ringiovanisce")
+    if (c.attiva_dal < e.attiva_dal) e.attiva_dal = c.attiva_dal;
+    e.giorni_attivi = daysBetween(e.attiva_dal, todayISO);
+    e.varianti_attive = c.varianti_attive;
     if (!e.settimane_viste.includes(WEEK)) e.settimane_viste.push(WEEK); delete e.spenta_il; nNote++;
   } else {
     nNuove++;
@@ -213,20 +220,22 @@ for (const c of clusterList) {
 }
 
 const itemOf = (c) => ({
-  cluster_id: c.cluster_id, rep_id: c.rep_id, formato_guess: c.formato_guess, video: c.video, video_url: c.video_url,
+  cluster_id: c.cluster_id, rep_id: c.rep_id,
+  ledger_key: c.ledger_key || c.rep_id,   // chiave STABILE della riga nel ledger (il rep può cambiare tra run)
+  formato_guess: c.formato_guess, video: c.video, video_url: c.video_url,
   attiva_dal: c.attiva_dal, giorni_attivi: c.giorni_attivi, varianti_attive: c.varianti_attive, piattaforme: c.piattaforme,
   page_name: c.page_name, title: c.title, cta: c.cta, link_url: c.link_url, url_ad_library: c.url_ad_library, copy: c.copy,
 });
 const deepCands = [];
 for (const [k, v] of Object.entries(ledger)) {
   if (v.stato !== "attiva" || v.scheda || !seenClusters.has(v.cluster_id)) continue;
-  const c = clusterByCid.get(v.cluster_id);
+  const c = { ...clusterByCid.get(v.cluster_id), ledger_key: k, giorni_attivi: v.giorni_attivi };
   if (v.giorni_attivi >= GATE_DAYS) deepCands.push(c);
   else if (v.prima_vista === todayISO) manifest.light.push(itemOf(c)); // nuova & sotto cancello → lettura leggera
 }
 deepCands.sort((a, b) => b.giorni_attivi - a.giorni_attivi || b.varianti_attive - a.varianti_attive);
 manifest.deep = deepCands.slice(0, CAP).map(itemOf);
-manifest.deep_rimandate = deepCands.slice(CAP).map(c => ({ cluster_id: c.cluster_id, rep_id: c.rep_id, giorni_attivi: c.giorni_attivi, varianti_attive: c.varianti_attive }));
+manifest.deep_rimandate = deepCands.slice(CAP).map(c => ({ cluster_id: c.cluster_id, rep_id: c.rep_id, ledger_key: c.ledger_key, giorni_attivi: c.giorni_attivi, varianti_attive: c.varianti_attive }));
 
 // Nota: NON tracciamo le "spente" (decisione Simone 2026-07-24): un'ad che smette di essere vista
 // smette di accumulare longevità e scende da sola dai winner → si auto-squalifica. Il gioco è la longevità.
@@ -242,4 +251,4 @@ console.log(`da elaborare: ${manifest.deep.length} schede profonde (cap ${CAP}, 
 if (anyCapped) console.log(`(campione 100/pagina: alcune pagine hanno più ads — la longevità fa emergere i winner da sola)`);
 console.log(`\ntop creatività per longevità:`);
 for (const c of clusterList.slice(0, 12)) console.log(`  ${String(c.giorni_attivi).padStart(3)}gg · ${String(c.varianti_attive).padStart(2)}var · ${c.formato_guess.padEnd(16)} · ${(c.copy || c.title || "").slice(0, 46).replace(/\n/g, " ")}`);
-console.log(`\n📁 ledger → monitoraggio/${BRAND}/ledger.json · 📄 manifest → monitoraggio/${BRAND}/_run-${WEEK}.json`);
+console.log(`\n📁 ledger → ${LEDGER_PATH}\n📄 manifest → ${join(BRAND_DIR, `_run-${WEEK}.json`)}`);

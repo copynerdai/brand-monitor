@@ -20,15 +20,17 @@
 
 ## 2. Architettura file (come costruita)
 
+Due strati separati: il **pacchetto skill** (`_system/skills/brand-monitor/`: questo DESIGN, CLAUDE.md, `tools/` — condivisibile, senza dati) e l'**archivio dati** (per-utente, percorso in `archive-root.txt`):
+
 ```
-monitoraggio/
+<archivio>/  (es. monitoraggio/)
 ├── index.md                        ← mappa dell'area: le "4 porte" + brand osservati
 ├── tracksheet-concorrenza.base     ← il "foglio Google": tabella viva su TUTTI i brand
-├── tools/                          ← script + dati di test (test-* fuori da git)
-├── DESIGN-report-e-tracking.md · SETUP.md
 └── <brand-osservato>/              ← es. emma/
     ├── config.json                 ← identità del brand: nome, sito, paese, lingua, pagine_fb[] (page_id). Compilato una volta.
+    ├── config.json                 ← identità del brand: nome, sito, paese, lingua, pagine_fb[]
     ├── ledger.json                 ← stato macchina: una riga per creatività (motore del dedup)
+    ├── _run-<settimana>.json       ← manifest del run (scritto dal censimento, letto per schede/report; fuori git)
     ├── ads/                        ← una scheda per creatività, scritta UNA volta
     │   └── <slug>-<ad_id-rappr>.md ← es. reframe-batteri-961585206240439.md
     └── report/                     ← un file a settimana: qui scorre il tempo
@@ -164,7 +166,7 @@ Il costo non è uniforme: tre lavori, tre prezzi. **Censimento** (leggere i meta
 **1. Censimento — le prime 100 ads attive di OGNI pagina del brand, gratis. [DECISO 2026-07-24 sera]**
 - **Un brand = nome + sito + una o più pagine Facebook** da cui sponsorizza. **Le pagine le fornisce Simone** (non si indovinano: una pagina "Emma's Finds" trovata per keyword si è rivelata un brand anti-fumo estraneo). Config in `monitoraggio/<brand>/config.json`: `nome`, `sito`, `paese`, `lingua`, `pagine_fb[]` con `page_id`. Si compila una volta.
 - **Campione = le prime 100 ads attive PER PAGINA** (`active_status=active` + `view_all_page_id=<id>` → solo le ads di quella pagina, **zero rumore**). 100 è sufficiente (decisione di Simone) e sostituisce sia il vecchio filtro-90-giorni sia il criterio "scroll" (che non era un criterio chiaro).
-- **Perché 100 NON perde i winner vecchi**: il set iniziale della Ad Library non è "i più recenti", mescola già longevi e nuovi — verificato: tra le prime ~80-180 ads di Emma comparivano creatività da 300+ giorni ancora attive. Quindi 100 cattura sia i **winner consolidati** sia le **novità**. ⚠️ Il filtro-data su `start_date` **NON si usa** (taglierebbe i winner longevi ancora attivi); resta solo come opzione `--since-days`, disattivata di default. Ordinamento/probe filtri (`tools/probe-filters.mjs`) restano disponibili ma non necessari con le pagine esatte.
+- **Perché 100 NON perde i winner vecchi**: il set iniziale della Ad Library non è "i più recenti", mescola già longevi e nuovi — verificato: tra le prime ~80-180 ads di Emma comparivano creatività da 300+ giorni ancora attive. Quindi 100 cattura sia i **winner consolidati** sia le **novità**. ⚠️ Il filtro-data su `start_date` **NON si usa ed è stato rimosso** (taglierebbe i winner longevi ancora attivi). Ordinamento/probe filtri (`tools/probe-filters.mjs`) restano disponibili ma non necessari con le pagine esatte.
 - Unisce le ads di tutte le pagine → raggruppa per `cluster_id` → calcola `giorni_attivi` e `varianti_attive`. Popola/aggiorna il ledger. Nessun token speso qui.
 - **Niente tracking delle spente** (decisione Simone 2026-07-24): non ci serve sapere quali ads si sono spente. Un'ad che smette di essere vista smette di accumulare `giorni_attivi` e scende da sola dalla classifica dei winner → **si auto-squalifica per longevità**. Nessuna sezione "spente" nel report, nessuna vista "spente" nella tracksheet, nessuna logica di rilevamento nello scraper. Il gioco è la longevità: chi cresce funziona.
 
@@ -186,7 +188,7 @@ Il costo non è uniforme: tre lavori, tre prezzi. **Censimento** (leggere i meta
 ```
 per ogni brand osservato:
   # CENSIMENTO — solo ads con attiva_dal negli ultimi 90 giorni
-  scraped  = scrape(brand, finestra_giorni=90)      # metadati di tutte le ads nella finestra (gratis)
+  scraped  = scrape(brand)   # prime 100 ads ATTIVE per ogni pagina del config (nessun filtro data) — gratis
   clusters = raggruppa(scraped)                      # video → xpv_asset_id ; statica → hash immagine/copy
   ledger   = load(ledger.json)
   da_elaborare = []

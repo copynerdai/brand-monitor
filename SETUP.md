@@ -1,38 +1,36 @@
 # Brand Monitor — SETUP da zero
 
-> Come installare la skill di monitoraggio ads (Piano B, scraping no-login) su un computer nuovo. **Nessun account Meta, nessun token, nessuna approvazione.** Compagno del [piano di costruzione](brand-monitor-piano.md).
+> Come installare le dipendenze della skill su un computer nuovo (scraping no-login: **nessun account Meta, nessun token**). Per l'installazione guidata da Claude vedi [INSTALL.md](INSTALL.md); questo file è il riferimento tecnico, in particolare la **Parte B** (quale Whisper per quale macchina).
 
 ---
 
-## Parte A — Scaletta d'installazione (da zero)
+## Parte A — Scaletta d'installazione
 
 ### 0. Prerequisiti base (se non già presenti)
 | Cosa | Mac | Windows |
 |---|---|---|
-| **Node.js** (LTS) | `brew install node` — oppure da nodejs.org | da nodejs.org (installer LTS) |
-| **Python 3** (serve solo per la trascrizione) | già presente; verifica `python3 --version` | da python.org (spunta "Add to PATH") |
-| **Homebrew** (solo Mac, per ffmpeg) | da brew.sh | — |
+| **Node.js** (LTS) | `brew install node` — oppure da nodejs.org | `winget install OpenJS.NodeJS.LTS` o da nodejs.org |
+| **Python 3** (solo per la trascrizione) | già presente; verifica `python3 --version` | `winget install Python.Python.3.12` o da python.org (spunta "Add to PATH") |
+| **Git** | incluso / `brew install git` | `winget install Git.Git` |
 
 ### 1. Scraping (obbligatorio)
+Dalla cartella del pacchetto:
 ```bash
 npm install playwright            # la libreria browser
 npx playwright install chromium   # scarica il browser Chromium (~150MB)
 ```
-Poi mettere lo script `scrape-ads.mjs` (il cuore della skill) in una cartella `tools/`.
-✅ Verifica: `node scrape-ads.mjs "<un brand noto>"` restituisce delle ads.
+✅ Verifica: `node tools/scrape-ads.mjs` senza argomenti stampa l'uso (nessun errore di modulo). Il test vero è il mini-censimento con un brand configurato: `node tools/scrape-ads.mjs <slug> --per-page 10` (vedi INSTALL.md §7).
 
-### 2. Trascrizione video (opzionale — solo se vuoi i testi parlati)
+### 2. Trascrizione video (per i testi dei video parlati)
+Il trascrittore è **`tools/transcribe.py`**, incluso: prova mlx-whisper e ripiega da solo su faster-whisper. Da installare solo il motore adatto (Parte B) + ffmpeg:
 ```bash
-# ffmpeg (estrae/gestisce l'audio)
 brew install ffmpeg               # Mac
-winget install Gyan.FFmpeg        # Windows (o choco install ffmpeg)
-
-# Whisper: SCEGLI il motore in base al computer → vedi Parte B
+winget install Gyan.FFmpeg        # Windows
 ```
-✅ Verifica: trascrivi un mp4 di prova e controlla il .txt in output.
+✅ Verifica: `python3 tools/transcribe.py <un-file.mp4>` produce `<nome> - trascrizione.txt`.
 
 ### 3. Verifica finale
-Run completo su 1 brand → copy + screenshot + (se video) trascrizione + riepilogo.
+Run completo su 1 brand configurato → censimento + trascrizione + schede + report (pipeline nel [CLAUDE.md](CLAUDE.md) della skill).
 
 ---
 
@@ -43,47 +41,37 @@ Run completo su 1 brand → copy + screenshot + (se video) trascrizione + riepil
 - **Chip**: `Apple M1/M2/M3/M4…` = **Apple Silicon** · `Intel…` = **Mac Intel**
 - **Memoria**: la RAM in GB
 
-**Su Windows**: Impostazioni → Sistema → Informazioni (Processore + RAM installata). Per la scheda video: Gestione attività (Ctrl+Shift+Esc) → Prestazioni → cerca una **GPU NVIDIA**.
+**Su Windows**: Impostazioni → Sistema → Informazioni (Processore + RAM installata).
 
-### Passo 2 — Scegli MOTORE (dal tipo di macchina) e MODELLO (dalla potenza)
-
-**MOTORE — dipende dalla piattaforma:**
+### Passo 2 — Installa il MOTORE giusto
 | Computer | Motore | Installazione |
 |---|---|---|
-| **Mac Apple Silicon** (M1–M4) | `mlx-whisper` (usa la GPU Apple) | `pip install mlx-whisper` |
+| **Mac Apple Silicon** (M1–M4) | `mlx-whisper` (usa la GPU Apple) | `pip3 install mlx-whisper` |
 | **Mac Intel** | `faster-whisper` (CPU) | `pip install faster-whisper` |
-| **PC con GPU NVIDIA** | `faster-whisper` (CUDA, velocissimo) | `pip install faster-whisper` |
-| **PC solo CPU** | `faster-whisper` (CPU) | `pip install faster-whisper` |
+| **PC Windows** | `faster-whisper` (CPU/CUDA) | `pip install faster-whisper` |
 
-**MODELLO — dipende dalla potenza (precisione ↔ velocità):**
-| Potenza macchina | Modello consigliato | Precisione | Note |
+`transcribe.py` sceglie da solo il motore disponibile: installane **uno** e basta.
+
+### Modelli (opzionali — i default vanno bene per le ads)
+Si cambiano con variabili d'ambiente, senza toccare i file:
+
+| Variabile | Vale per | Default | Alternative |
 |---|---|---|---|
-| **Forte** — Apple Silicon o GPU NVIDIA, RAM ≥16GB | **`large-v3-turbo`** ⭐ *(default per quasi tutti)* | Altissima | Veloce E accurato |
-| Vuoi il massimo assoluto | `large-v3` | Massima | Più lento, guadagno minimo sul turbo |
-| **Media** — RAM 8–16GB, no GPU | `medium` | Buona | Compromesso |
-| **Debole** — RAM ≤8GB, macchina datata | `small` | Sufficiente | Per le ads (audio pulito, corte) spesso basta |
-| Molto debole / lentissima | `base` | Bassa | Ultima spiaggia |
+| `BRAND_MONITOR_WHISPER_MLX` | mlx-whisper (Apple Silicon) | `mlx-community/whisper-large-v3-turbo` | `mlx-community/whisper-large-v3-mlx` (max qualità) · `mlx-community/whisper-small-mlx` (macchine deboli) |
+| `BRAND_MONITOR_WHISPER` | faster-whisper (Intel/Windows) | `small` | `turbo` / `medium` (macchine forti) · `base` (molto deboli) |
 
-**ID modello da passare** (cambia per motore):
-| Modello | mlx-whisper (Apple Silicon) | faster-whisper (Intel/PC) |
-|---|---|---|
-| turbo ⭐ | `mlx-community/whisper-large-v3-turbo` | `turbo` |
-| max | `mlx-community/whisper-large-v3-mlx` | `large-v3` |
-| medium | `mlx-community/whisper-medium-mlx` | `medium` |
-| small | `mlx-community/whisper-small-mlx` | `small` |
-
-### Regola pratica (per non pensarci troppo)
-- **Hai un Mac M-qualcosa o un PC con scheda NVIDIA?** → usa `large-v3-turbo` e non farti domande.
-- **Macchina vecchia/debole?** → parti da `small`. Per le ads (clip corte, audio chiaro) la differenza è minima.
-- La lingua si imposta a parte (`it`, `en`, o `auto` per rilevamento). Le ads USA vanno in `en`, quelle italiane in `it`.
+Regola pratica: **Apple Silicon → default e non pensarci**. Macchina vecchia/debole → il default `small` di faster-whisper è già la scelta prudente. La lingua la gestisce la pipeline dal `config.json` del brand (`en`, `it`, `auto`).
 
 ---
 
-## Cosa contiene la skill (pacchetto da distribuire)
-1. `scrape-ads.mjs` — scraper (ricerca + intercettazione GraphQL + download media)
-2. passo trascrizione — wrapper Whisper (motore scelto in Parte B)
-3. generazione report — la fa l'AI leggendo i dati grezzi
-4. `watchlist` — quali brand monitorare (per brand cliente)
-5. questo `SETUP.md`
+## Cosa contiene il pacchetto
+1. [CLAUDE.md](CLAUDE.md) — l'orchestratore della skill (attivazione, pipeline, guardrail)
+2. `tools/scrape-ads.mjs` — censimento (prime 100 ads attive per pagina, multi-pagina) + clustering per creatività + ledger + manifest. **Non scarica media**
+3. `tools/transcribe-deep.mjs` + `tools/transcribe.py` — trascrizione dei video da scheda profonda (video in tmp, poi cestinato)
+4. `tools/run-all.mjs` — "monitora tutti i brand" in un colpo
+5. `tools/probe-*.mjs` — diagnostica (rieseguire se Meta cambia layout)
+6. [DESIGN-report-e-tracking.md](DESIGN-report-e-tracking.md) · [INSTALL.md](INSTALL.md) · [README.md](README.md) · `ad-scraping-command.md`
 
-> ⚠️ Manutenzione: lo scraping segue la struttura della Ad Library di Meta; se cambia il layout/GraphQL lo script va aggiornato. Volumi bassi (settimanale, pochi brand), sempre da IP residenziale (il proprio computer), mai da VPS/datacenter.
+I **dati** (config dei brand, ledger, schede, report) NON stanno nel pacchetto: vivono nell'archivio per-utente puntato da `archive-root.txt`.
+
+> ⚠️ Manutenzione: lo scraping segue la struttura della Ad Library di Meta; se cambia il layout/GraphQL lo script va aggiornato (probe di diagnosi inclusi). Volumi bassi (settimanale, pochi brand), sempre da IP residenziale (il proprio computer), mai da VPS/datacenter.

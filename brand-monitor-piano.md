@@ -27,7 +27,7 @@ Monitoraggio settimanale delle ads Meta (Facebook/Instagram, statiche e video) d
 |---|---|---|
 | 1 | **[DECISO]** Fonte dati primaria = **Meta Ad Library API ufficiale** (endpoint `ads_archive`) | Gratuita; grazie al DSA copre TUTTE le ads mostrate in UE (non solo politiche) e fornisce `eu_total_reach` = numero reale di persone raggiunte, unico proxy di performance "vero" disponibile |
 | 2 | **[DECISO]** Media (screenshot + video) = **Playwright headless SENZA login**, solo sulla shortlist delle top ads | L'API restituisce i testi ma NON i file media; la snapshot page è pubblica; volumi minimi (decine di pagine/settimana) → rischio blocchi ~zero |
-| 3 | **[DECISO]** Trascrizione video = **mlx-whisper locale** riusando la skill `transcribe` esistente ([_system/skills/transcribe.md](../transcribe.md)) | Già installata (ffmpeg + mlx_whisper presenti), gratuita, nessun upload |
+| 3 | **[DECISO]** Trascrizione video = **Whisper locale** (oggi: `tools/transcribe.py` incluso nel pacchetto — mlx-whisper su Apple Silicon, fallback faster-whisper) | Gratuita, nessun upload |
 | 4 | **[DECISO]** **MAI usare il login Meta di Simone** (né profilo né Business Manager) in nessuno script o browser automatizzato | Unico scenario che mette a rischio l'account. L'app developer dedicata è read-only su archivio pubblico e non tocca il BM |
 | 5 | **[DECISO]** Il lavoro pesante lo fanno **script deterministici** in `monitoraggio/tools/`; il modello fa solo il lavoro di giudizio (analisi, report) | Robustezza + il run settimanale costa pochi token anche con modelli meno potenti |
 | 6 | **[DECISO]** Nome skill = `brand-monitor` (rispetta il placeholder già presente nel registry) | Coerenza col contratto di CLAUDE.md §3 |
@@ -226,7 +226,7 @@ Regole: lingua italiana; link markdown relativi (mai wikilink); date ISO; **mai 
 
 ## 9. Fasi di costruzione (per Opus)
 
-> **STATO 2026-07-24 (pomeriggio/sera):** Fasi **2, 3, 4, 5, 6 COSTRUITE E VALIDATE su dati veri** (Fasi 3-4 assorbite nello scraper). Motore: `tools/scrape-ads.mjs` (censimento attive + clustering per creatività via `cluster_id` + ledger + manifest + tetto 18) e `tools/transcribe-deep.mjs` (download+Whisper+cestina, arricchisce il manifest). Skill operativa scritta: [brand-monitor.md](CLAUDE.md); registry → **Active**. **Manca solo**: il primo report reale end-to-end su un brand configurato con `page_id` (la ricerca per keyword porta rumore) → è l'accettazione della Fase 6. Nota emersa in costruzione: il filtro-data 90gg è stato reso opzionale (di default OFF) perché su `start_date` taglierebbe i winner longevi ancora attivi; il volume si limita col tetto sullo scroll (`--max`) + tetto schede (`--cap`).
+> **STATO 2026-07-24 (pomeriggio/sera):** Fasi **2, 3, 4, 5, 6 COSTRUITE E VALIDATE su dati veri** (Fasi 3-4 assorbite nello scraper). Motore: `tools/scrape-ads.mjs` (censimento attive + clustering per creatività via `cluster_id` + ledger + manifest + tetto 18) e `tools/transcribe-deep.mjs` (download+Whisper+cestina, arricchisce il manifest). Skill operativa scritta: [brand-monitor.md](CLAUDE.md); registry → **Active**. **Manca solo**: il primo report reale end-to-end su un brand configurato con `page_id` (la ricerca per keyword porta rumore) → è l'accettazione della Fase 6. Nota emersa in costruzione: il filtro-data 90gg è stato **rimosso** perché su `start_date` taglierebbe i winner longevi ancora attivi; il volume si limita col campione per pagina (`--per-page`, default 100) + tetto schede (`--cap`).
 
 > Una fase alla volta, nell'ordine. Ogni fase si chiude quando il criterio di accettazione è verificato. Non costruire la fase successiva prima.
 
@@ -308,4 +308,4 @@ Dopo aver testato bene la skill, creare **rapidamente** un protocollo per darla 
 - [DESIGN — report, trascrizioni, tracking (dedup)](DESIGN-report-e-tracking.md)
 - CLAUDE.md §3 — registry (placeholder brand-monitor)
 - Template competitor
-- [Skill transcribe (copia versionata)](../transcribe.md)
+- Trascrittore incluso: `tools/transcribe.py` (storicamente derivato dalla skill transcribe del vault del proprietario)

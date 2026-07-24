@@ -1,16 +1,17 @@
 // transcribe-deep.mjs — Fase 5 del brand-monitor.
 // Legge il manifest _run-<week>.json di un brand, e per ogni creatività VIDEO da scheda profonda
-// scarica il video in una cartella temporanea, lo trascrive con transcribe.sh (mlx-whisper locale),
+// scarica il video in una cartella temporanea, lo trascrive con tools/transcribe.py
+// (mlx-whisper su Mac Apple Silicon, fallback faster-whisper su Intel/Windows),
 // scrive la trascrizione DENTRO il manifest, poi CESTINA il video (nessun media conservato — DESIGN §1.6).
 //
 // Uso:
-//   NODE_PATH=~/.invoice-tools/node_modules node transcribe-deep.mjs <brand-slug> [--week 2026-W30] [--lang auto] [--limit N]
+//   node tools/transcribe-deep.mjs <brand-slug> [--week 2026-W30] [--lang auto] [--limit N] [--root <archivio>]
 //
 // Dopo questo passo, il manifest è pronto per la skill brand-monitor.md (scrive schede + report).
 
 import { writeFileSync, readFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { tmpdir, homedir } from "node:os";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -32,7 +33,7 @@ function resolveArchiveRoot() {
   if (process.env.BRAND_MONITOR_ARCHIVE) return process.env.BRAND_MONITOR_ARCHIVE;
   const cfg = join(__dirname, "..", "archive-root.txt");
   if (existsSync(cfg)) { const p = readFileSync(cfg, "utf8").trim(); if (p) return p; }
-  console.error("Archivio non configurato: crea _system/skills/brand-monitor/archive-root.txt, oppure --root <path>, oppure BRAND_MONITOR_ARCHIVE.");
+  console.error(`Archivio non configurato: crea ${join(__dirname, "..", "archive-root.txt")}, oppure --root <path>, oppure env BRAND_MONITOR_ARCHIVE.`);
   process.exit(1);
 }
 const MON_ROOT = resolveArchiveRoot();
