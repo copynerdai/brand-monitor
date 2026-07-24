@@ -58,13 +58,9 @@ const MANIFEST = join(BRAND_DIR, `_run-${week}.json`);
 if (!existsSync(MANIFEST)) { console.error("Manifest non trovato:", MANIFEST); process.exit(1); }
 const manifest = JSON.parse(readFileSync(MANIFEST, "utf8"));
 
-// transcribe.sh: skill sorella nel vault (_system/skills/transcribe.sh), relativa al pacchetto; fallback alla copia live
-const TRANSCRIBE = (() => {
-  const inVault = join(__dirname, "..", "..", "transcribe.sh");     // _system/skills/transcribe.sh
-  if (existsSync(inVault)) return inVault;
-  const live = join(homedir(), ".claude", "skills", "transcribe", "transcribe.sh");
-  return live;
-})();
+// trascrittore cross-platform incluso nel pacchetto (Mac: mlx-whisper · Windows/Intel: faster-whisper)
+const PY = process.platform === "win32" ? "python" : "python3";
+const TRANSCRIBE_PY = join(__dirname, "transcribe.py");
 const TMP = join(tmpdir(), "brand-monitor-transcribe");
 mkdirSync(TMP, { recursive: true });
 
@@ -82,7 +78,7 @@ for (const it of videoItems) {
     if (!r.ok) throw new Error("HTTP " + r.status);
     writeFileSync(mp4, Buffer.from(await r.arrayBuffer()));
     process.stdout.write(" · trascrivo");
-    execFileSync("bash", [TRANSCRIBE, "-l", LANG, "-o", TMP, mp4], { stdio: ["ignore", "ignore", "inherit"] });
+    execFileSync(PY, [TRANSCRIBE_PY, mp4, LANG, TMP], { stdio: ["ignore", "ignore", "inherit"] });
     const txtPath = join(TMP, `${id} - trascrizione.txt`);
     it.trascrizione = existsSync(txtPath) ? readFileSync(txtPath, "utf8").trim() : "";
     console.log(` · ✓ ${it.trascrizione.length} caratteri`);
