@@ -12,44 +12,63 @@
 4. **`ad_id` sempre come stringa** (15-16 cifre: come numero rischia arrotondamenti in JSON/JS).
 5. **Archivio CENTRALIZZATO.** Un brand osservato = una cartella in `monitoraggio/`, elaborata una volta per tutti. I brand clienti si collegano via watchlist (`brands/<brand>/competitors/watchlist.md`).
 6. **Nessun media conservato in locale.** Il video si scarica in tmp solo per la trascrizione, poi si cestina; le immagini non si scaricano. Per rivedere una creatività: link Ad Library (`?id=<ad_id>`) — se l'ad è spenta, togliere il filtro "ads attive" (la libreria mostra anche le inattive).
-7. **Tre viste, una sola fonte di verità.** Verità operativa = `ledger.json` + schede in `ads/`. Viste: **schede** (profondità), **tracksheet-concorrenza.base** (tabella viva, si aggiorna da sola dai frontmatter), **report settimanali** (delta). Nessun file di vista da rigenerare.
+7. **Tre documenti, una sola fonte di verità per ciascun lavoro.** `creativita-<anno>.md` per il testo, `analisi-<anno>.md` per il giudizio, `ledger.json` per lo stato macchina. La tracksheet è la proiezione del frontmatter di `brand.md`: si aggiorna da sola, non si rigenera a mano.
 8. **Tutto in italiano** nei file umani, proprietà del frontmatter comprese. In inglese solo i termini canonici del direct response (Winner, Hook, Big Idea, CTA) e gli identificatori tecnici (`ad_id`, `cluster_id`, `url`).
 9. **Compatibile con la swipe library**: stessa grammatica (copy verbatim + struttura + angolo) di swipe-ingestion → un'ad vincente si promuove a swipe entry senza rifare il lavoro.
 
 ---
 
-## 2. Architettura file (come costruita)
+## 2. Architettura file (come costruita) — **v4, riorganizzata il 2026-08-02**
 
 Due strati separati: il **pacchetto skill** (`_system/skills/brand-monitor/`: questo DESIGN, CLAUDE.md, `tools/` — condivisibile, senza dati) e l'**archivio dati** (per-utente, percorso in `archive-root.txt`):
 
 ```
 <archivio>/  (es. monitoraggio/)
-├── index.md                        ← mappa dell'area: le "4 porte" + brand osservati
-├── tracksheet-concorrenza.base     ← il "foglio Google": tabella viva su TUTTI i brand
-└── <brand-osservato>/              ← es. emma/
-    ├── config.json                 ← identità del brand: nome, sito, paese, lingua, pagine_fb[] (page_id). Compilato una volta.
-    ├── config.json                 ← identità del brand: nome, sito, paese, lingua, pagine_fb[]
-    ├── ledger.json                 ← stato macchina: una riga per creatività (motore del dedup)
-    ├── _run-<settimana>.json       ← manifest del run (scritto dal censimento, letto per schede/report; fuori git)
-    ├── ads/                        ← una scheda per creatività, scritta UNA volta
-    │   └── <slug>-<ad_id-rappr>.md ← es. reframe-batteri-961585206240439.md
-    └── report/                     ← un file a settimana: qui scorre il tempo
-        └── 2026-W30.md
+├── index.md                        ← mappa dell'area
+├── tracksheet-concorrenza.base     ← UNA riga per BRAND (filtra tipo == "brand-monitorato")
+└── <brand-osservato>/
+    ├── brand.md                    🔄 testa rigenerata + dossier a mano · ⭐ È LA RIGA DELLA TRACKSHEET
+    ├── creativita-<anno>.md        ➕ APPESO   indice + copy + trascrizioni di tutte le creatività
+    ├── analisi-<anno>.md           ➕ APPESO   osservazioni di periodo + un'analisi per creatività
+    ├── config.json                 ← UNA VOLTA nome, sito, pagine_fb[], commento
+    ├── ledger.json                 🔄 RISCRITTO una riga per creatività (motore del dedup)
+    └── _run.json                   🔄 RISCRITTO manifest dell'ULTIMO run (file di lavoro, fuori git)
 ```
 
-**`config.json`** (un brand = nome + sito + una o più pagine FB da monitorare, fornite da Simone):
-```json
-{ "nome": "Emma", "sito": "https://emmarelief.com", "paese": "US", "lingua": "en",
-  "pagine_fb": [ {"nome":"Emma","page_id":"105745751961937"},
-                 {"nome":"Emma's Mom Hacks","page_id":"681873181686696"} ] }
-```
-Lo scraper legge da qui pagine/paese/lingua; il censimento cicla tutte le `pagine_fb` (prime 100 ads attive ciascuna) e le unisce sotto lo stesso brand.
+**Tre documenti per brand**, non uno per ad e non uno per settimana. A 20 brand sono 60 file markdown, e restano 60 anche dopo un anno di run.
 
-- **Nome scheda** = `<slug>-<ad_id-rappresentante>.md`: lo slug (2-3 parole kebab-case, coniato alla creazione, poi immutabile) rende leggibili tab/ricerca/backlink di Obsidian; l'id in coda garantisce unicità.
-- **Watchlist per brand cliente**: `brands/<brand>/competitors/watchlist.md`. Esempio pilota: watchlist ADSP.
+### I tre strati, e perché sono separati
+
+Tre lavori diversi, con costi e cicli di vita diversi. Confonderli è ciò che faceva esplodere l'archivio.
+
+1. **CONTENUTO** → `creativita-<anno>.md`. Copy verbatim e trascrizioni integrali di **tutte** le creatività. Nessuno lo legge in sequenza: serve a Ctrl+F, a grep e al modello. Cresce di ~1,9 KB per creatività.
+2. **INDICE** → `ledger.json` (macchina, completo) + la tabella in testa al contenitore (umano). Dice cosa esiste, quanto è longevo, quante varianti ha.
+3. **GIUDIZIO** → `analisi-<anno>.md`. Costoso, quindi solo per chi supera il cancello. Sta in un file solo per brand, con le stesse ancore `### <ad_id>` del contenitore: `analisi-<anno>.md#<ad_id>` sta al giudizio come `creativita-<anno>.md#<ad_id>` sta al testo.
+4. **IDENTITÀ** → `brand.md`. Chi è il brand, perché lo seguiamo, com'è costruito il suo account. Porta nel frontmatter i numeri, ed è per questo che **è la riga della tracksheet**: Obsidian Bases fa una riga per nota.
+
+### Le regole del contenitore
+
+- **Append-only**: una creatività entra una volta sola e la sua sezione non viene **mai** riscritta né riordinata. Le nuove si aggiungono in fondo.
+- **Solo fatti immutabili nel corpo** (titolo dell'ad, data di attivazione, landing, url, testo). I contatori che cambiano a ogni run — `giorni_attivi`, `varianti_attive`, la scheda collegata — vivono **solo nell'indice in testa**, che è l'unica parte rigenerata. Per questo il corpo non ha mai motivo di cambiare.
+- **Ancora = `ad_id` nudo** (`### 1575436696895220`): immutabile, deterministica, generata dalla macchina. Da ovunque: `creativita-<anno>.md#<ad_id>`.
+- **Anno = quello di `prima_vista`**; una creatività non cambia mai file. Split per semestre se un file supera ~1,5 MB (sopra, Obsidian rallenta in edit).
+- **Superset di tutto ciò che abbiamo**: entrano anche le creatività che hanno perso la riga a ledger (rappresentante di cluster cambiato fra due run) purché ne esista il contenuto. Buttare del testo già raccolto è l'unica perdita irreversibile della pipeline.
+- **Un'ad spenta resta.** È un archivio, non un monitor: il valore di uno swipe non scade.
+
+### Cosa NON esiste più (deciso il 2026-08-02)
+
+- ~~`trascrizioni-<settimana>.md`~~ — ogni run ri-elencava le stesse creatività ancora attive: a 20 brand sarebbero stati 1.040 file/anno e 307 MB, duplicati al ~95%.
+- ~~`_run-<settimana>.json`~~ — il manifest è un file di lavoro, non un archivio. La storia temporale sta in `ledger[].settimane_viste`.
+- ~~`report/<settimana>.md`~~ — sostituiti da `report/<anno>.md` con una sezione appesa per run: da 52 file/brand/anno a 1.
+- ~~Copy e trascrizione duplicati dentro le schede~~ — l'analisi linka l'ancora nel contenitore.
+- ~~Un file per scheda in `ads/`~~ — **[2026-08-02, secondo giro]** le analisi sono confluite in `analisi-<anno>.md`. Motivo: con migliaia di creatività una cartella di schede è ingestibile, e una tabella per-ad è illeggibile. La navigazione va per strati: tracksheet (brand) → brand.md → contenitore/analisi → ancora della singola ad.
+- ~~`report/<anno>.md` separato~~ — le osservazioni di periodo sono analisi anche loro e stanno in `analisi-<anno>.md`. Non hanno cadenza fissa: si scrivono quando c'è qualcosa da dire.
+
+**Effetto misurato** su una proiezione a 20 brand × 300 creatività/anno: da ~4.000 file e 626 MB a ~980 file e 38 MB. Il numero di file cresce con **quante ads meritano un'analisi**, non con **quante settimane passano**.
+
+- **Nome scheda** = `<slug>-<ad_id>.md`: lo slug (2-3 parole kebab-case, coniato alla creazione, poi immutabile) rende leggibili tab/ricerca/backlink di Obsidian; l'id in coda garantisce unicità.
+- **Watchlist per brand cliente**: `brands/<brand>/competitors/watchlist.md`.
 - **Niente cartelle `raw/` né `media/`**.
-
----
 
 ## 3. `ledger.json` — lo stato che abilita il dedup
 
@@ -72,7 +91,7 @@ Una riga per **creatività** (chiave = `ad_id` rappresentante, stringa). È l'un
     "piattaforme": ["FACEBOOK", "INSTAGRAM", "AUDIENCE_NETWORK", "MESSENGER"],
     "video": true,
     "trascritta": true,
-    "scheda": "ads/reframe-batteri-961585206240439.md",
+    "analisi": "analisi-2026.md#961585206240439",
     "url_ad_library": "https://www.facebook.com/ads/library/?id=961585206240439"
   }
 }
@@ -88,60 +107,44 @@ Note di schema:
 
 ---
 
-## 4. La scheda — `ads/<slug>-<ad_id-rappr>.md`
+## 4. L'analisi — una sezione di `analisi-<anno>.md`, non un file
 
-Creata una volta. Il frontmatter è la **proiezione dello stato** (lo legge la Base); il corpo è **immutabile**. Template:
+Ogni creatività che supera il cancello riceve un'**analisi**: una sezione `### <ad_id>` appesa in fondo alla parte «Analisi per creatività» di `analisi-<anno>.md`. Stessa ancora del contenitore: `analisi-<anno>.md#<ad_id>` sta al giudizio come `creativita-<anno>.md#<ad_id>` sta al testo. Scritta una volta, mai rigenerata. Template:
 
 ```markdown
----
-tipo: ad-monitorata
-ad_id: "961585206240439"
-brand: emma
-formato: video-testimonial
-angolo: reframe di meccanismo — non è la fibra, sono i batteri
-stato: attiva
-attiva_dal: 2026-04-08
-prima_vista: 2026-07-24
-giorni_attivi: 107
-varianti_attive: n/d
-impression: n/d
-url: https://www.facebook.com/ads/library/?id=961585206240439
----
+### 961585206240439
+**[Brand] formato — titolo parlante**
+📄 testo integrale: [creativita-<anno>.md#<ad_id>](creativita-<anno>.md#<ad_id>) · 🔗 [Ad Library](…)
 
-# [Brand] formato — titolo parlante
-🔗 [Vedi nell'Ad Library](...)
-- Pagina · Prodotto · Attiva dal · Piattaforme · CTA/destinazione
-
-## Copy (post)
-> [verbatim]
-
-## Trascrizione (parlato)          ← solo se video; SEMPRE, anche se c'è la caption
-> [integrale]
-
-## Analisi — angolo & formato
-- Formato · Angolo (1 riga) · Big idea / meccanismo · Hook · Struttura
+##### Analisi — angolo & formato
+- **Formato**: …                          ← check-archivio la legge e la riporta sul ledger
+- **Angolo (1 riga)**: …                  ← idem: righe obbligatorie, in questa forma esatta
+- Big idea / meccanismo · Hook · Struttura
 - Leva emotiva · Target/avatar · CTA / offerta · 💡 Trasferibile a noi
 
-## Creatività
-> Non conservata in locale — si vede nell'Ad Library (per le spente: togliere
-> il filtro "ads attive"). [1 riga di descrizione del visual]
+##### Creatività
+> Non conservata in locale — si vede nell'Ad Library. [1 riga sul visual]
 ```
 
-Campi che lo script tocca nei run successivi: **solo** `stato`, `giorni_attivi`, `varianti_attive` (nulla del corpo).
+**Il testo verbatim NON sta qui**: sta nel contenitore, e l'analisi ne linka l'ancora. Due copie dello stesso testo divergono; una sola no.
+
+In testa al file: l'**indice delle analisi** (tabella creatività → angolo → ancora) e la parte «**Osservazioni di periodo**» — l'erede del report settimanale, senza cadenza fissa: una sezione `## <periodo>` quando c'è qualcosa da dire (cosa stanno testando, winner consolidati, pattern emergenti).
 
 ---
 
-## 5. `tracksheet-concorrenza.base` — la tabella viva
+## 5. `tracksheet-concorrenza.base` — una riga per BRAND
 
-Core plugin **Bases** di Obsidian (attivo per Simone e studenti, zero installazioni). Filtra `tipo == "ad-monitorata"` in tutto il vault → ogni scheda è una riga; colonne = proprietà del frontmatter; si aggiorna da sola.
+Core plugin **Bases** di Obsidian (zero installazioni). Filtra `tipo == "brand-monitorato"` → **una riga per brand osservato** (il frontmatter di `brand.md`), non per ad. La colonna Brand è una formula `file.asLink(nome)`: il nome è cliccabile e apre la pagina del brand.
 
-Colonne: Brand · Formato · Angolo · **Gg attivi** · **Varianti** · Attiva dal · Prima vista · Ad Library. Viste salvate: **Tutte** (ordinate per `giorni_attivi` disc.) · **🏆 Winner (≥30 gg)** · **🆕 Ultime arrivate**. (Niente vista/colonna "spente": si va per longevità.)
+Colonne: Brand (link) · commento · creatività · ads attive · 🏆 winner ≥30gg · 🆕 ultimi 14gg · video · trascritte · analisi · longevità max · ultimo run. Viste: **Brand osservati** · **📊 Copertura del lavoro** (censite vs trascritte vs analizzate) · **🆕 Attività recente**.
+
+La tabella non cresce col tempo: cresce coi brand. Il dettaglio per-ad non le appartiene — si scende cliccando il brand, poi dall'indice del contenitore.
 
 ---
 
-## 6. Report settimanale — `report/<YYYY-W##>.md`
+## 6. Report — `report/<anno>.md`, una sezione per settimana
 
-Digest del lunedì. Nome file con settimana zero-padded; titolo con l'intervallo di date umano. Struttura (vedi 2026-W30):
+Digest del lunedì, **appeso in fondo al file dell'anno** come sezione `## <YYYY-W##>` (non più un file per settimana). Scorrendo il file si legge l'evoluzione del brand. Struttura (vedi 2026-W30):
 
 ```markdown
 ## In sintesi                       ← N creatività · 🆕 X nuove · 🏆 Y winner consolidati
@@ -216,7 +219,7 @@ per ogni brand osservato:
   # TETTO: se len(da_elaborare) > ~20 → tieni i top per (giorni_attivi, varianti_attive), LOGGA i rimandati
   per ogni cluster in da_elaborare[:tetto]:
     if cluster.video: scarica in tmp → trascrivi (una volta) → CESTINA
-    analizza angolo/formato + conia lo slug → scrivi ads/<slug>-<rappr>.md
+    analizza angolo/formato → appendi la sezione ### <ad_id> in analisi-<anno>.md
 
   # Niente rilevamento spente: chi non si vede più smette di crescere e scende dai winner da solo (auto-squalifica per longevità)
 
@@ -251,6 +254,12 @@ per ogni brand osservato:
 11. **[2026-07-24 sera] Campione = prime 100 ads attive per pagina** (non il filtro-data, non lo "scroll"): sufficiente e cattura sia i winner vecchi sia le novità (il set iniziale della Ad Library li mescola già).
 12. **[2026-07-24 sera] Report a due letture**: la sezione **🆕 "Cosa stanno testando"** (angoli e copy nuovi) è prioritaria e facile da vedere, accanto ai **🏆 winner confermati**.
 13. **[2026-07-24 sera] Niente tracking/report delle spente**: la longevità le auto-squalifica (chi non cresce più scende dai winner). Rimosse: sezione report, vista Base, logica scraper.
+14. **[2026-08-02] Tre strati separati** — contenuto (contenitore append-only per brand/anno) · indice (ledger + tabella in testa) · giudizio (schede). Motivo: il numero di file deve crescere con quante ads meritano un'analisi, non con quante settimane passano.
+15. **[2026-08-02] Niente più file per settimana**: manifest unico `_run.json`, report annuale con sezioni appese, contenuto append-only. I vecchi `trascrizioni-<settimana>.md`, `_run-<settimana>.json` e `report/<settimana>.md` sono stati migrati e cestinati il 2026-08-02 (5 brand, 681 creatività, zero perdite verificate).
+16. **[2026-08-02] Il testo verbatim sta in UN solo posto** (il contenitore). Le schede ne portano l'estratto d'apertura e il link all'ancora `#<ad_id>`.
+17. **[2026-08-02] La tracksheet è per BRAND, non per ad.** Una riga per brand osservato (`brand.md` col frontmatter `tipo: brand-monitorato`), con commento e numeri. Cliccando si scende alla pagina del brand, da lì al contenitore e alle analisi, da lì all'ancora della singola ad. Le due alternative scartate: uno stub .md per creatività (migliaia di note per popolare una tabella) e la tabella per-ad (illeggibile oltre qualche centinaio di righe). Quando servirà un foglio ordinabile su tutto l'archivio, la strada è **un singolo HTML generato dai ledger**.
+18. **[2026-08-02] Tre documenti per brand**: `brand.md` (identità + riga di tracksheet) · `creativita-<anno>.md` (il testo) · `analisi-<anno>.md` (il giudizio + le osservazioni di periodo). Sciolte le cartelle `ads/` e `report/`. Migrazione verificata: 96 analisi e 5 report, 1.119 frasi confrontate col backup, zero perdite.
+19. **[2026-08-02] In `brand.md` la macchina possiede solo la testa**: frontmatter + blocco fra i marcatori `<!-- numeri -->`. Tutto ciò che viene dopo è dossier scritto a mano e non si tocca mai.
 
 ## 10. Punti aperti (da tarare sui dati reali)
 

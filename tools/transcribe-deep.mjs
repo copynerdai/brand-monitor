@@ -47,16 +47,9 @@ if (!LANG) {
 }
 LANG = LANG || "auto";
 
-// trova il manifest (settimana esplicita o l'ultimo)
-let week = flags.week;
-if (!week) {
-  const { readdirSync } = await import("node:fs");
-  const runs = readdirSync(BRAND_DIR).filter(f => /^_run-.*\.json$/.test(f)).sort();
-  if (!runs.length) { console.error("Nessun manifest _run-*.json in", BRAND_DIR); process.exit(1); }
-  week = runs[runs.length - 1].replace(/^_run-|\.json$/g, "");
-}
-const MANIFEST = join(BRAND_DIR, `_run-${week}.json`);
-if (!existsSync(MANIFEST)) { console.error("Manifest non trovato:", MANIFEST); process.exit(1); }
+// manifest unico di lavoro
+const MANIFEST = join(BRAND_DIR, "_run.json");
+if (!existsSync(MANIFEST)) { console.error("Manifest non trovato:", MANIFEST, "— lancia prima scrape-ads.mjs."); process.exit(1); }
 const manifest = JSON.parse(readFileSync(MANIFEST, "utf8"));
 
 // trascrittore cross-platform incluso nel pacchetto (Mac: mlx-whisper · Windows/Intel: faster-whisper)
@@ -66,7 +59,7 @@ const TMP = join(tmpdir(), "brand-monitor-transcribe");
 mkdirSync(TMP, { recursive: true });
 
 const videoItems = (manifest.deep || []).filter(it => it.video && it.video_url && !it.trascrizione);
-console.log(`\n🎙️  trascrizione — ${BRAND} · ${week}\n   video da trascrivere: ${videoItems.length} (limite ${LIMIT === Infinity ? "∞" : LIMIT}) · lingua ${LANG}\n`);
+console.log(`\n🎙️  trascrizione — ${BRAND}\n   video da trascrivere: ${videoItems.length} (limite ${LIMIT === Infinity ? "∞" : LIMIT}) · lingua ${LANG}\n`);
 
 let done = 0;
 for (const it of videoItems) {
@@ -95,5 +88,5 @@ for (const it of videoItems) {
 }
 
 writeFileSync(MANIFEST, JSON.stringify(manifest, null, 2) + "\n");
-console.log(`\n✓ trascritti ${done}/${videoItems.length} · manifest aggiornato → monitoraggio/${BRAND}/_run-${week}.json`);
+console.log(`\n✓ trascritti ${done}/${videoItems.length} · manifest aggiornato → ${BRAND}/_run.json`);
 console.log(`  (le trascrizioni sono ora nei deep[].trascrizione, pronte per la skill)`);

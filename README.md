@@ -8,6 +8,8 @@ Monitoraggio settimanale delle ads della concorrenza sulla **Meta Ad Library** (
 brand-monitor/
 ├── CLAUDE.md                     ← il cervello: identità, attivazione, pipeline (leggi questo per primo)
 ├── DESIGN-report-e-tracking.md   ← il contratto del modello dati (schede, ledger, campionamento)
+├── DESIGN-automazione-vps-mac.md ← 💡 IDEA APPUNTATA, non costruita: come farla partire in automatico
+│                                    (VPS scopre, Mac scarica e trascrive, Syncthing fa da bus)
 ├── brand-monitor-piano.md        ← storia di costruzione, fasi, decisioni
 ├── SETUP.md                      ← installazione da zero (dipendenze, scelta Whisper per macchina)
 ├── tools/

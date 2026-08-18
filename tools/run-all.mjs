@@ -49,6 +49,9 @@ for (const b of brands) {
   try {
     execFileSync("node", [join(__dirname, "scrape-ads.mjs"), b, ...passthru], { stdio: "inherit" });
     if (!flags["no-transcribe"]) execFileSync("node", [join(__dirname, "transcribe-deep.mjs"), b, ...rootArg], { stdio: "inherit" });
+    // riversa subito il contenuto nel contenitore annuale: è deterministico e non va mai saltato
+    execFileSync("node", [join(__dirname, "append-creativita.mjs"), b, ...rootArg], { stdio: "inherit" });
+    execFileSync("node", [join(__dirname, "componi-brand.mjs"), b, ...rootArg], { stdio: "inherit" });
     esiti.push(`✓ ${b}`);
   } catch (e) {
     esiti.push(`✗ ${b} (${e.message.split("\n")[0]})`);
@@ -56,4 +59,4 @@ for (const b of brands) {
 }
 console.log(`\n=== FINE — ${brands.length} brand processati ===`);
 for (const e of esiti) console.log("  " + e);
-console.log(`\nOra il modello scrive schede + report per ogni brand leggendo i manifest _run-<week>.json in ${ARCHIVE}/<brand>/.`);
+console.log(`\nContenuto già in ${ARCHIVE}/<brand>/creativita-<anno>.md. Ora il modello appende le analisi e le osservazioni di periodo in analisi-<anno>.md leggendo _run.json, poi lancia check-archivio.mjs.`);

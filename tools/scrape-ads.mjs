@@ -69,7 +69,13 @@ if (!pages.length && !QUERY) {
 }
 const PER_PAGE = flags["per-page"] ? parseInt(flags["per-page"], 10) : 100; // "le prime 100 ads" per pagina (Simone)
 const CAP = flags.cap ? parseInt(flags.cap, 10) : 18;                        // tetto schede profonde/run
-const GATE_DAYS = 14;
+const GATE_DAYS = flags.gate ? parseInt(flags.gate, 10) : 14;               // soglia longevità per la scheda profonda
+// ordinamento della Ad Library (opzionale, solo modalità pagine): --sort total_impressions [--sort-dir desc]
+// serve quando si chiedono "le prime N migliori" invece del set iniziale di default.
+const SORT_MODE = flags.sort && flags.sort !== true ? String(flags.sort) : null;
+const SORT_DIR = flags["sort-dir"] ? String(flags["sort-dir"]) : "desc";
+// budget di scroll: scala col campione richiesto (la Ad Library carica ~5 ads per giro di ruota)
+const MAX_SCROLLS = Math.max(60, Math.ceil(PER_PAGE / 4));
 const LEDGER_PATH = join(BRAND_DIR, "ledger.json");
 
 // ---------- utilità ----------
@@ -120,7 +126,7 @@ function extract(node) {
 
 // ---------- browser: cicla le pagine, prime PER_PAGE ads ciascuna ----------
 console.log(`\n🔎 brand-monitor scrape · ${BRAND} (${COUNTRY}) · week ${WEEK}`);
-console.log(`   pagine: ${pages.length ? pages.map(p => p.nome || p.page_id).join(", ") : 'query "' + QUERY + '"'} · campione ${PER_PAGE}/pagina · gate ${GATE_DAYS}gg · cap ${CAP}\n`);
+console.log(`   pagine: ${pages.length ? pages.map(p => p.nome || p.page_id).join(", ") : 'query "' + QUERY + '"'} · campione ${PER_PAGE}/pagina · gate ${GATE_DAYS}gg · cap ${CAP}${SORT_MODE ? ` · ordinamento ${SORT_MODE} ${SORT_DIR}` : ""}\n`);
 
 const browser = await chromium.launch({ headless: !flags.headed });
 const ctx = await browser.newContext({
@@ -139,6 +145,8 @@ let consentDone = false;
 for (const src of sources) {
   let u = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${COUNTRY}&media_type=all`;
   u += src.page_id ? `&view_all_page_id=${src.page_id}` : `&q=${encodeURIComponent(src.query)}&search_type=keyword_unordered`;
+  // --sort riproduce l'URL "ordinato" della Ad Library (es. le prime N per impression, non il set di default)
+  if (SORT_MODE && src.page_id) u += `&search_type=page&is_targeted_country=false&sort_data[direction]=${SORT_DIR}&sort_data[mode]=${SORT_MODE}`;
   const startSize = collected.size;
   try { await page.goto(u, { waitUntil: "domcontentloaded", timeout: 45000 }); } catch (e) { console.log(`  [${src.label}] goto:`, e.message); }
   await page.waitForTimeout(2500);
@@ -149,11 +157,11 @@ for (const src of sources) {
     }
   }
   let stable = 0, hit = false;
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < MAX_SCROLLS; i++) {
     const before = collected.size;
     await page.mouse.wheel(0, 4000); await page.waitForTimeout(1200);
     if (collected.size - startSize >= PER_PAGE) { hit = true; break; }
-    if (collected.size === before) { if (++stable >= 4) break; } else stable = 0;
+    if (collected.size === before) { if (++stable >= 8) break; } else stable = 0;
   }
   if (hit) anyCapped = true;
   console.log(`  [${src.label}] +${collected.size - startSize} ads${hit ? " (raggiunto il campione " + PER_PAGE + ", ce ne sono altre)" : " (tutte)"}`);
@@ -214,7 +222,7 @@ for (const c of clusterList) {
       brand: BRAND, cluster_id: c.cluster_id, formato: c.formato_guess, angolo_1riga: null,
       attiva_dal: c.attiva_dal, prima_vista: todayISO, settimane_viste: [WEEK], stato: "attiva",
       giorni_attivi: c.giorni_attivi, varianti_attive: c.varianti_attive, fascia_impression: "n/d",
-      piattaforme: c.piattaforme, video: c.video, trascritta: false, scheda: null, url_ad_library: c.url_ad_library,
+      piattaforme: c.piattaforme, video: c.video, trascritta: false, analisi: null, url_ad_library: c.url_ad_library,
     };
   }
 }
@@ -242,7 +250,9 @@ manifest.deep_rimandate = deepCands.slice(CAP).map(c => ({ cluster_id: c.cluster
 
 manifest.summary = { creativita_censite: clusterList.length, nuove: nNuove, ancora_attive: nNote, da_scheda_profonda: manifest.deep.length, rimandate: manifest.deep_rimandate.length, da_lettura_leggera: manifest.light.length };
 writeFileSync(LEDGER_PATH, JSON.stringify(ledger, null, 2) + "\n");
-writeFileSync(join(BRAND_DIR, `_run-${WEEK}.json`), JSON.stringify(manifest, null, 2) + "\n");
+// manifest UNICO: è un file di lavoro, non un archivio. La storia temporale sta in
+// ledger[].settimane_viste, il contenuto in creativita-<anno>.md — nessuno dei due va duplicato a settimana.
+writeFileSync(join(BRAND_DIR, "_run.json"), JSON.stringify(manifest, null, 2) + "\n");
 
 // ---------- report a schermo ----------
 console.log(`\n=== CENSIMENTO ${BRAND} · ${WEEK} ===`);
@@ -251,4 +261,4 @@ console.log(`da elaborare: ${manifest.deep.length} schede profonde (cap ${CAP}, 
 if (anyCapped) console.log(`(campione 100/pagina: alcune pagine hanno più ads — la longevità fa emergere i winner da sola)`);
 console.log(`\ntop creatività per longevità:`);
 for (const c of clusterList.slice(0, 12)) console.log(`  ${String(c.giorni_attivi).padStart(3)}gg · ${String(c.varianti_attive).padStart(2)}var · ${c.formato_guess.padEnd(16)} · ${(c.copy || c.title || "").slice(0, 46).replace(/\n/g, " ")}`);
-console.log(`\n📁 ledger → ${LEDGER_PATH}\n📄 manifest → ${join(BRAND_DIR, `_run-${WEEK}.json`)}`);
+console.log(`\n📁 ledger → ${LEDGER_PATH}\n📄 manifest → ${join(BRAND_DIR, "_run.json")}`);
