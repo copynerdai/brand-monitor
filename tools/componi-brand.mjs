@@ -15,7 +15,7 @@
 
 import { writeFileSync, readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 const argv = process.argv.slice(2);
 const flags = {};
@@ -33,7 +33,18 @@ function resolveArchiveRoot() {
   if (existsSync(cfg)) { const p = readFileSync(cfg, "utf8").trim(); if (p) return p; }
   console.error("Archivio non configurato."); process.exit(1);
 }
+function resolveSwipeRoot(archive) {
+  // Libreria swipe (standard v2, 2026-09-12): le schede delle ads che meritano il lavoro completo
+  // stanno in <swipe>/ads/<brand>.md. Risoluzione: --swipe → env BRAND_MONITOR_SWIPE → swipe-root.txt
+  // nel pacchetto → cartella `swipe/` accanto all'archivio. Se il documento non esiste, nulla cambia.
+  if (flags.swipe) return flags.swipe;
+  if (process.env.BRAND_MONITOR_SWIPE) return process.env.BRAND_MONITOR_SWIPE;
+  const cfg = join(__dirname, "..", "swipe-root.txt");
+  if (existsSync(cfg)) { const p = readFileSync(cfg, "utf8").trim(); if (p) return p; }
+  return join(archive, "..", "swipe");
+}
 const ARCHIVE = resolveArchiveRoot();
+const SWIPE_ROOT = resolveSwipeRoot(ARCHIVE);
 
 const brands = pos.length ? pos : readdirSync(ARCHIVE).filter(d => {
   try { return statSync(join(ARCHIVE, d)).isDirectory() && existsSync(join(ARCHIVE, d, "ledger.json")); } catch { return false; }
@@ -57,6 +68,9 @@ for (const b of brands) {
   // le creatività si contano dalle sezioni del contenitore: è l'archivio, non il ledger
   const sezioni = contenitori.flatMap(f => [...readFileSync(join(dir, f), "utf8").matchAll(/^### (\d+)$/gm)].map(m => m[1]));
   const nAnalisi = analisi.reduce((s, f) => s + [...readFileSync(join(dir, f), "utf8").matchAll(/^### (\d+)$/gm)].length, 0);
+  const SWIPE_DOC = join(SWIPE_ROOT, "ads", `${b}.md`);
+  const swipeRel = existsSync(SWIPE_DOC) ? relative(dir, SWIPE_DOC) : null;
+  const nSwipe = swipeRel ? [...readFileSync(SWIPE_DOC, "utf8").matchAll(/^### (\d+)$/gm)].length : 0;
   const righe = sezioni.map(id => ledger[id]).filter(Boolean);
   const conta = (p) => righe.filter(p).length;
   const peso = [...contenitori, ...analisi].reduce((s, f) => s + statSync(join(dir, f)).size, 0);
@@ -69,6 +83,7 @@ for (const b of brands) {
     video: conta(r => r.video),
     trascritte: conta(r => r.trascritta),
     analisi: nAnalisi,
+    schede_swipe: nSwipe,
     longevita_max: Math.max(0, ...righe.map(r => r.giorni_attivi || 0)),
   };
 
@@ -90,7 +105,7 @@ for (const b of brands) {
   const L = [];                                   // le righe si accumulano: "" è una riga vuota vera
   L.push(INIZIO);
   L.push(`**${stat.creativita} creatività** da ${stat.ads_attive} ads attive · 🏆 ${stat.winner_30gg} winner (≥30gg) · 🆕 ${stat.novita_14gg} recenti (≤14gg) · longevità massima ${stat.longevita_max} giorni`);
-  L.push(`**${stat.video} video**, di cui ${stat.trascritte} trascritti · **${stat.analisi} analisi** scritte · ultimo censimento ${run.week || "n/d"}`);
+  L.push(`**${stat.video} video**, di cui ${stat.trascritte} trascritti · **${stat.analisi} analisi** scritte${swipeRel ? ` · **${stat.schede_swipe} schede swipe**` : ""} · ultimo censimento ${run.week || "n/d"}`);
   L.push("", "| Dove | Cosa c'è dentro |", "|---|---|");
   for (const a of anni) {
     if (existsSync(join(dir, `creativita-${a}.md`)))
@@ -98,6 +113,8 @@ for (const b of brands) {
     if (existsSync(join(dir, `analisi-${a}.md`)))
       L.push(`| **[analisi-${a}.md](analisi-${a}.md)** | Osservazioni di periodo (cosa stanno testando) + un'analisi per le creatività che se lo meritano |`);
   }
+  if (swipeRel)
+    L.push(`| **[swipe/ads/${b}.md](${swipeRel})** | Schede complete nello standard v2 (testo integrale, traduzione, anatomia dell'hook, struttura, template), raggruppate per livello di consapevolezza |`);
   L.push("| `ledger.json` | Stato macchina: una riga per creatività, motore del dedup |");
   if (config.sito || pagine) {
     L.push("");
@@ -132,5 +149,5 @@ for (const b of brands) {
   }
 
   writeFileSync(DEST, `${fm}\n\n# ${config.nome || b}\n\n${blocco}${dossier}`);
-  console.log(`✓ ${b}/brand.md · ${stat.creativita} creatività · ${stat.analisi} analisi · ${Math.round(peso / 1024)} KB di archivio`);
+  console.log(`✓ ${b}/brand.md · ${stat.creativita} creatività · ${stat.analisi} analisi · ${stat.schede_swipe} schede swipe · ${Math.round(peso / 1024)} KB di archivio`);
 }

@@ -4,3 +4,4 @@ tools/test-*
 node_modules/
 package-lock.json
 package.json
+swipe-root.txt

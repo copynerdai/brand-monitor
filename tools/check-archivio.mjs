@@ -3,21 +3,22 @@
 // Struttura attesa (tre documenti per brand + due file macchina):
 //   brand.md              pagina d'ingresso e RIGA della tracksheet (frontmatter coi numeri)
 //   creativita-<anno>.md  contenuto: indice + copy verbatim + trascrizioni, una sezione per ad_id
-//   analisi-<anno>.md     giudizio: osservazioni di periodo + un'analisi per creatività
+//   analisi-<anno>.md     giudizio: osservazioni di periodo + le analisi a 6 campi già scritte
+//   <swipe>/ads/<brand>.md  (fuori dall'archivio) schede complete nello standard v2, una `### <ad_id>` per pezzo
 //   ledger.json           stato macchina · _run.json  manifest dell'ultimo run
 //
-// SYNC  — legge `Angolo (1 riga)` e `Formato` dalle analisi e li riporta sul ledger; segna
+// SYNC  — legge `Angolo (1 riga)` e `Formato` dalle analisi E dalle schede swipe (che vincono) e li riporta sul ledger; segna
 //         `trascritta` su ogni riga video del manifest.
 // CHECK — creatività a ledger senza sezione nel contenitore (il controllo che conta: vorrebbe dire
 //         contenuto non archiviato), analisi che puntano a creatività inesistenti, frontmatter di
 //         brand.md rotto, residui delle strutture precedenti.
 //
-// Uso: node tools/check-archivio.mjs <brand-slug> [--no-sync] [--root <archivio>]
+// Uso: node tools/check-archivio.mjs <brand-slug> [--no-sync] [--root <archivio>] [--swipe <libreria swipe>]
 // Esce con codice 1 se trova incoerenze.
 
 import { writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { haParlatoUtile } from "./lib-parlato.mjs";
 
 const argv = process.argv.slice(2);
@@ -39,7 +40,20 @@ function resolveArchiveRoot() {
   console.error("Archivio non configurato: archive-root.txt / --root / BRAND_MONITOR_ARCHIVE.");
   process.exit(1);
 }
-const DIR = join(resolveArchiveRoot(), BRAND);
+function resolveSwipeRoot(archive) {
+  // Libreria swipe (standard v2, 2026-09-12): le schede delle ads che meritano il lavoro completo
+  // stanno in <swipe>/ads/<brand>.md. Risoluzione: --swipe → env BRAND_MONITOR_SWIPE → swipe-root.txt
+  // nel pacchetto → cartella `swipe/` accanto all'archivio. Se il documento non esiste, nulla cambia.
+  if (flags.swipe) return flags.swipe;
+  if (process.env.BRAND_MONITOR_SWIPE) return process.env.BRAND_MONITOR_SWIPE;
+  const cfg = join(__dirname, "..", "swipe-root.txt");
+  if (existsSync(cfg)) { const p = readFileSync(cfg, "utf8").trim(); if (p) return p; }
+  return join(archive, "..", "swipe");
+}
+const ARCHIVE = resolveArchiveRoot();
+const DIR = join(ARCHIVE, BRAND);
+const SWIPE_DOC = join(resolveSwipeRoot(ARCHIVE), "ads", `${BRAND}.md`);
+const swipeRel = existsSync(SWIPE_DOC) ? relative(DIR, SWIPE_DOC) : null;
 const LEDGER_PATH = join(DIR, "ledger.json");
 const ledger = existsSync(LEDGER_PATH) ? JSON.parse(readFileSync(LEDGER_PATH, "utf8")) : {};
 const manifest = existsSync(join(DIR, "_run.json")) ? JSON.parse(readFileSync(join(DIR, "_run.json"), "utf8")) : null;
@@ -51,6 +65,8 @@ const testoAnalisi = fileAnalisi.map(f => readFileSync(join(DIR, f), "utf8")).jo
 const sezioniDi = (t) => new Set([...t.matchAll(/^### (\d+)$/gm)].map(m => m[1]));
 const idContenuto = sezioniDi(testoCont);
 const idAnalisi = sezioniDi(testoAnalisi);
+const testoSwipe = swipeRel ? readFileSync(SWIPE_DOC, "utf8") : "";
+const idSwipe = sezioniDi(testoSwipe);
 
 const problemi = [];   // bloccanti: qualcosa è incoerente o perso
 const note = [];       // spiegabili: da sapere, non fanno fallire il check
@@ -70,6 +86,17 @@ if (!flags["no-sync"]) {
       ledger[id].analisi = `${f}#${id}`;
       sincronizzate++;
     }
+  }
+  // le schede swipe (standard v2) sono la versione lavorata: se esistono, vincono sull'analisi a 6 campi
+  for (const blocco of testoSwipe.split(/(?=^### \d+$)/m)) {
+    const id = (blocco.match(/^### (\d+)$/m) || [])[1];
+    if (!id || !ledger[id]) continue;
+    const angolo = (blocco.match(/^-\s*\*\*Angolo \(1 riga\)\*\*:\s*(.+)$/m) || [])[1];
+    const formato = (blocco.match(/^-\s*\*\*Formato\*\*:\s*(.+)$/m) || [])[1];
+    if (angolo) ledger[id].angolo_1riga = angolo.replace(/\*\*/g, "").trim();
+    if (formato) ledger[id].formato = formato.replace(/\*\*/g, "").trim();
+    ledger[id].analisi = `${swipeRel}#${id}`;
+    sincronizzate++;
   }
 }
 
@@ -117,6 +144,8 @@ if (senzaSezione > 5) problemi.push(`…e altre ${senzaSezione - 5} creatività 
 
 // ogni analisi deve riferirsi a una creatività archiviata
 for (const id of idAnalisi) if (!idContenuto.has(id)) problemi.push(`analisi ${id}: non esiste la creatività corrispondente nel contenitore`);
+// ogni scheda swipe deve riferirsi a una creatività archiviata (l'ancora è lo stesso ad_id)
+for (const id of idSwipe) if (!idContenuto.has(id)) problemi.push(`scheda swipe ${id}: non esiste la creatività corrispondente nel contenitore`);
 
 // il manifest corrente non deve avere creatività fuori dal ledger
 if (manifest) for (const it of (manifest.deep || [])) {
@@ -135,9 +164,9 @@ for (const f of readdirSync(DIR)) {
 
 // ---------- esito ----------
 console.log(`\n🔍 check archivio · ${BRAND}`);
-console.log(`   ledger ${Object.keys(ledger).length} creatività · contenitore ${idContenuto.size} sezioni · analisi ${idAnalisi.size}${flags["no-sync"] ? "" : ` (${sincronizzate} sincronizzate)`}`);
+console.log(`   ledger ${Object.keys(ledger).length} creatività · contenitore ${idContenuto.size} sezioni · analisi ${idAnalisi.size} · schede swipe ${swipeRel ? idSwipe.size : "n/d (nessun documento)"}${flags["no-sync"] ? "" : ` (${sincronizzate} sincronizzate)`}`);
 if (manifest) console.log(`   ultimo run ${manifest.week || "n/d"} · ${videoTot} video · ${videoTrascritti} con parlato · ${videoMuti} muti · ${videoFalliti} falliti`);
-console.log(`   file: ${["brand.md", ...contenitori, ...fileAnalisi, "ledger.json", "config.json"].map(f => `${existsSync(join(DIR, f)) ? "✓" : "✗"} ${f}`).join(" · ")}`);
+console.log(`   file: ${["brand.md", ...contenitori, ...fileAnalisi, "ledger.json", "config.json"].map(f => `${existsSync(join(DIR, f)) ? "✓" : "✗"} ${f}`).join(" · ")}${swipeRel ? ` · ✓ ${swipeRel}` : ""}`);
 if (note.length) {
   console.log(`\nℹ️  ${note.length} note (nessun dato a rischio):`);
   for (const n of note) console.log("   · " + n);

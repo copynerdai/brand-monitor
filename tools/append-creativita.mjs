@@ -24,7 +24,7 @@
 
 import { writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { haParlatoUtile } from "./lib-parlato.mjs";
 
 const argv = process.argv.slice(2);
@@ -46,7 +46,20 @@ function resolveArchiveRoot() {
   console.error("Archivio non configurato: archive-root.txt / --root / BRAND_MONITOR_ARCHIVE.");
   process.exit(1);
 }
-const BRAND_DIR = join(resolveArchiveRoot(), BRAND);
+function resolveSwipeRoot(archive) {
+  // Libreria swipe (standard v2, 2026-09-12): le schede delle ads che meritano il lavoro completo
+  // stanno in <swipe>/ads/<brand>.md. Risoluzione: --swipe → env BRAND_MONITOR_SWIPE → swipe-root.txt
+  // nel pacchetto → cartella `swipe/` accanto all'archivio. Se il documento non esiste, nulla cambia.
+  if (flags.swipe) return flags.swipe;
+  if (process.env.BRAND_MONITOR_SWIPE) return process.env.BRAND_MONITOR_SWIPE;
+  const cfg = join(__dirname, "..", "swipe-root.txt");
+  if (existsSync(cfg)) { const p = readFileSync(cfg, "utf8").trim(); if (p) return p; }
+  return join(archive, "..", "swipe");
+}
+const ARCHIVE = resolveArchiveRoot();
+const BRAND_DIR = join(ARCHIVE, BRAND);
+const SWIPE_DOC = join(resolveSwipeRoot(ARCHIVE), "ads", `${BRAND}.md`);
+const swipeRel = existsSync(SWIPE_DOC) ? relative(BRAND_DIR, SWIPE_DOC) : null;
 const ledger = JSON.parse(readFileSync(join(BRAND_DIR, "ledger.json"), "utf8"));
 const config = existsSync(join(BRAND_DIR, "config.json")) ? JSON.parse(readFileSync(join(BRAND_DIR, "config.json"), "utf8")) : {};
 
@@ -231,10 +244,14 @@ for (const [anno, righe] of [...perAnno.entries()].sort()) {
   }
 
   // ---------------- indice (unica parte rigenerata a ogni run)
-  // quali creatività hanno già un'analisi scritta: si legge dalle sezioni di analisi-<anno>.md
+  // quali creatività hanno già un'analisi scritta: dalle sezioni di analisi-<anno>.md e, se esiste,
+  // dal documento swipe del brand (standard v2), che vince perché è la versione lavorata
   const FILE_ANALISI = join(BRAND_DIR, `analisi-${anno}.md`);
-  const idAnalizzati = new Set(existsSync(FILE_ANALISI)
-    ? [...readFileSync(FILE_ANALISI, "utf8").matchAll(/^### (\d+)$/gm)].map(m => m[1]) : []);
+  const linkAnalisi = new Map();
+  if (existsSync(FILE_ANALISI))
+    for (const m of readFileSync(FILE_ANALISI, "utf8").matchAll(/^### (\d+)$/gm)) linkAnalisi.set(m[1], `analisi-${anno}.md#${m[1]}`);
+  if (swipeRel)
+    for (const m of readFileSync(SWIPE_DOC, "utf8").matchAll(/^### (\d+)$/gm)) linkAnalisi.set(m[1], `${swipeRel}#${m[1]}`);
 
   const perIndice = ordine.map(id => [id, tutte.get(id)]).filter(([, r]) => r)
     .sort((a, b) => (b[1].varianti_attive || 0) - (a[1].varianti_attive || 0) || (b[1].giorni_attivi || 0) - (a[1].giorni_attivi || 0));
@@ -246,7 +263,7 @@ for (const [anno, righe] of [...perAnno.entries()].sort()) {
   testa.push(`> **Contenitore append-only**: ogni creatività censita compare qui **una volta sola**, con copy verbatim e — se video — trascrizione integrale. Le sezioni non vengono mai riscritte; le nuove si aggiungono in fondo.`);
   testa.push(`> **${ordine.length} creatività** · ${conParlato} con trascrizione${totIncomplete ? ` · ${totIncomplete} in attesa di contenuto` : ""}`);
   testa.push(`> Indice ordinato per varianti attive (= quanto budget ci spingono dietro). Giorni e varianti si aggiornano a ogni run; il corpo no.`);
-  testa.push(`> Pagina del brand: [brand.md](brand.md) · analisi: [analisi-${anno}.md](analisi-${anno}.md) · stato macchina: \`ledger.json\``);
+  testa.push(`> Pagina del brand: [brand.md](brand.md) · analisi: [analisi-${anno}.md](analisi-${anno}.md)${swipeRel ? ` · schede swipe: [ads/${BRAND}.md](${swipeRel})` : ""} · stato macchina: \`ledger.json\``);
   testa.push("");
   testa.push("## Indice");
   testa.push("");
@@ -255,8 +272,8 @@ for (const [anno, righe] of [...perAnno.entries()].sort()) {
   for (const [id, r] of perIndice) {
     const c = contenuto.get(id) || {};
     const etichetta = r.angolo_1riga || (c.title ? `*${esc(c.title)}*` : "—");
-    const analizzata = idAnalizzati.has(id);
-    testa.push(`| [\`${id}\`](#${id}) | ${esc(etichetta)} | ${esc(r.formato || c.formato || "n/d")} | ${r.giorni_attivi ?? ""} | ${r.varianti_attive ?? ""} | ${analizzata ? `[📄](analisi-${anno}.md#${id})` : ""} |`);
+    const link = linkAnalisi.get(id);
+    testa.push(`| [\`${id}\`](#${id}) | ${esc(etichetta)} | ${esc(r.formato || c.formato || "n/d")} | ${r.giorni_attivi ?? ""} | ${r.varianti_attive ?? ""} | ${link ? `[📄](${link})` : ""} |`);
   }
   testa.push("");
   testa.push("---");

@@ -37,6 +37,8 @@ Due strati separati: il **pacchetto skill** (`_system/skills/brand-monitor/`: qu
 
 **Tre documenti per brand**, non uno per ad e non uno per settimana. A 20 brand sono 60 file markdown, e restano 60 anche dopo un anno di run.
 
+**Dal 2026-09-12 c'è un quarto documento, fuori dall'archivio**: `<swipe>/ads/<brand-osservato>.md`, nella libreria swipe del Copy Genius ospite (`swipe/_standard-scheda.md`). Contiene le schede complete (standard v2) delle creatività che superano il cancello, una `### <ad_id>` per pezzo, raggruppate per livello di consapevolezza. I tool lo risolvono come l'archivio (`--swipe` → `BRAND_MONITOR_SWIPE` → `swipe-root.txt` → `swipe/` accanto all'archivio) e, se manca, non cambiano comportamento. Anche a 20 brand sono 20 file in più, uno per brand.
+
 ### I tre strati, e perché sono separati
 
 Tre lavori diversi, con costi e cicli di vita diversi. Confonderli è ciò che faceva esplodere l'archivio.
@@ -108,6 +110,8 @@ Note di schema:
 ---
 
 ## 4. L'analisi — una sezione di `analisi-<anno>.md`, non un file
+
+> **Aggiornamento 2026-09-12 (standard swipe v2).** L'analisi profonda di una creatività è ora la **scheda completa** in `<swipe>/ads/<brand>.md#<ad_id>` (intestazione con livello di consapevolezza, testo integrale a blocchi, traduzione, anatomia dell'hook, struttura, template): forma in `swipe/_standard-scheda.md`, procedura in `swipe-ingestion`, aggancio in CLAUDE.md Passo C. Il template a 6 campi qui sotto resta il formato delle analisi già scritte e il ripiego per un'installazione senza libreria swipe. `check-archivio.mjs` legge `Formato` e `Angolo (1 riga)` da entrambi i posti; la scheda swipe vince e il ledger punta a lei.
 
 Ogni creatività che supera il cancello riceve un'**analisi**: una sezione `### <ad_id>` appesa in fondo alla parte «Analisi per creatività» di `analisi-<anno>.md`. Stessa ancora del contenitore: `analisi-<anno>.md#<ad_id>` sta al giudizio come `creativita-<anno>.md#<ad_id>` sta al testo. Scritta una volta, mai rigenerata. Template:
 
